@@ -300,5 +300,52 @@ describe("NetXToken", function () {
       expect(await netXToken.balanceOf(otherAccount.address)).to.equal(value);
       expect(await netXToken.allowance(owner.address, spender.address)).to.equal(0);
     });
+
+    it("Should invalidate permit signature after cancelPermit", async function () {
+      const { netXToken, owner, spender } = await loadFixture(deployNetXTokenFixture);
+      const value = ethers.parseEther("1000");
+      const deadline = (await ethers.provider.getBlock("latest")).timestamp + 3600;
+      const nonce = await netXToken.nonces(owner.address);
+
+      // Generate valid signature
+      const domain = {
+        name: "NetX Token",
+        version: "1",
+        chainId: await ethers.provider.getNetwork().then((n) => n.chainId),
+        verifyingContract: netXToken.target,
+      };
+
+      const types = {
+        Permit: [
+          { name: "owner", type: "address" },
+          { name: "spender", type: "address" },
+          { name: "value", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+        ],
+      };
+
+      const message = {
+        owner: owner.address,
+        spender: spender.address,
+        value: value,
+        nonce: nonce,
+        deadline: deadline,
+      };
+
+      const signature = await owner.signTypedData(domain, types, message);
+      const { v, r, s } = ethers.Signature.from(signature);
+
+      // Call cancelPermit to invalidate the signature
+      await netXToken.connect(owner).cancelPermit();
+
+      // Verify nonce has incremented
+      expect(await netXToken.nonces(owner.address)).to.equal(nonce + BigInt(1));
+
+      // Attempt to use the old signature
+      await expect(
+        netXToken.permit(owner.address, spender.address, value, deadline, v, r, s)
+      ).to.be.revertedWithCustomError(netXToken, "ERC2612InvalidSigner");
+    });
   });
 });
