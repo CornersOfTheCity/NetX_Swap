@@ -4,10 +4,43 @@ require("dotenv").config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  solidity: "0.8.28",
+  solidity: {
+    compilers: [
+      {
+        version: "0.6.12",
+        settings: {
+          optimizer: {
+            enabled: false,
+            runs: 200,
+          },
+        },
+      },
+      {
+        version: "0.8.28",
+        settings: {
+          optimizer: {
+            enabled: false,
+            runs: 200,
+          },
+        },
+      },
+
+    ],
+    overrides: {
+      "contracts/TRIAS.sol": {
+        version: "0.8.26",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      }
+    }
+  },
 
   networks: {
-    hardhat: {}, 
+    hardhat: {},
     bsc: {
       url: `https://bsc-mainnet.infura.io/v3/${process.env.INFURA_PROJECT_ID}`,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
