@@ -31,13 +31,13 @@ describe("NetXSwap", function () {
     const netXSwap = await NetXSwap.deploy(owner.address, netXToken.target);
 
     // // 铸造一些代币给 NetXSwap 合约和用户
-    // const MINT_AMOUNT = ethers.parseEther("10000");
-    // await netXToken.mint(netXSwap.target, MINT_AMOUNT);
+    const MINT_AMOUNT = ethers.parseEther("10000");
+    await netXToken.transfer(netXSwap.target, MINT_AMOUNT);
 
-    // await triasNewToken.mint(user.address, ethers.parseEther("1000"));
-    // await triasOldToken.mint(user.address, ethers.parseEther("1000"));
-    // await tHECOToken.mint(user.address, ethers.parseEther("1000"));
-    // await tToken.mint(user.address, ethers.parseEther("1000"));
+    await triasNewToken.transfer(user.address, ethers.parseEther("1000"));
+    await triasOldToken.transfer(user.address, ethers.parseEther("1000"));
+    await tHECOToken.transfer(user.address, ethers.parseEther("1000"));
+    await tToken.transfer(user.address, ethers.parseEther("1000"));
 
     // 设置 NetXSwap 合约中的可交换代币地址
     await netXSwap.setTokens(
@@ -111,7 +111,6 @@ describe("NetXSwap", function () {
         deployNetXSwapFixture
       );
 
-      await netXToken.transfer(netXSwap.target, ethers.parseEther("1000"));
       const balanceBefore = await netXToken.balanceOf(owner.address);
       const contractBalance = await netXToken.balanceOf(netXSwap.target);
 
@@ -135,8 +134,6 @@ describe("NetXSwap", function () {
         deployNetXSwapFixture
       );
 
-      await triasNewToken.transfer(user.address, ethers.parseEther("1000"));
-      await netXToken.transfer(netXSwap.target, ethers.parseEther("1000"));
       const userTriasNewBalance = await triasNewToken.balanceOf(user.address);
       const userNetXBalanceBefore = await netXToken.balanceOf(user.address);
 
@@ -182,11 +179,9 @@ describe("NetXSwap", function () {
       const { netXSwap, netXToken, triasNewToken, user, anotherUser } = await loadFixture(deployNetXSwapFixture);
 
       await netXSwap.setSwapStatus(true);
-      await triasNewToken.transfer(user.address, ethers.parseEther("1000"));
 
       // 故意将合约的 NetX 代币余额耗尽
-      const contractNetXBalance = await netXToken.balanceOf(netXSwap.target);
-      await netXToken.transfer(anotherUser.address, contractNetXBalance);
+      await netXSwap.claimTokens(netXToken.target, anotherUser.address);
 
       const userTriasNewBalance = await triasNewToken.balanceOf(user.address);
       await triasNewToken.connect(user).approve(netXSwap.target, userTriasNewBalance);
@@ -206,11 +201,6 @@ describe("NetXSwap", function () {
       const { netXSwap, netXToken, triasNewToken, triasOldToken, tHECOToken, tToken, user } = await loadFixture(deployNetXSwapFixture);
 
       await netXSwap.setSwapStatus(true);
-      await triasNewToken.transfer(user.address, ethers.parseEther("1000"));
-      await triasOldToken.transfer(user.address, ethers.parseEther("1000"));
-      await tHECOToken.transfer(user.address, ethers.parseEther("1000"));
-      await tToken.transfer(user.address, ethers.parseEther("1000"));
-      await netXToken.transfer(netXSwap.target, ethers.parseEther("4000"));
 
       const triasNewAmount = await triasNewToken.balanceOf(user.address);
       await triasNewToken.connect(user).approve(netXSwap.target, triasNewAmount);

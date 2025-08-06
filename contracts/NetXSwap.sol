@@ -14,7 +14,8 @@ contract NetXSwap is Ownable, ReentrancyGuard {
     address public tHECOToken;
     address public tToken;
 
-    bool public openSwap;
+    uint256 public startTime;
+    uint256 public endTime;
 
     enum TokenType {
         Zero,
@@ -32,13 +33,20 @@ contract NetXSwap is Ownable, ReentrancyGuard {
 
     constructor(
         address _initialOwner,
-        address _netXToken
+        address _netXToken,
+        uint256 _starttime,
+        uint256 _endtime
     ) Ownable(_initialOwner) {
         netXToken = _netXToken;
+        startTime = _starttime;
+        endTime = _endtime;
     }
 
     modifier onlyWhenSwapOpen() {
-        require(openSwap, "Swap is not open");
+        require(
+            startTime <= block.timestamp && block.timestamp <= endTime,
+            "Swap is not open"
+        );
         _;
     }
 
@@ -66,7 +74,7 @@ contract NetXSwap is Ownable, ReentrancyGuard {
 
         require(
             token != address(0),
-            string(abi.encodePacked(tokenName, "not set"))
+            string(abi.encodePacked(tokenName, " not set"))
         );
         uint256 tokenAmount = IERC20(token).balanceOf(msg.sender);
         require(
@@ -78,13 +86,19 @@ contract NetXSwap is Ownable, ReentrancyGuard {
             "Insufficient NetX balance"
         );
 
+        uint256 beforeTokenBalance = IERC20(token).balanceOf(address(this));
         IERC20(token).transferFrom(msg.sender, address(this), tokenAmount);
+        uint256 afterTokenBalance = IERC20(token).balanceOf(address(this));
+        require(
+            afterTokenBalance == beforeTokenBalance + tokenAmount,
+            "Token transfer failed"
+        );
         IERC20(netXToken).transfer(msg.sender, tokenAmount);
 
         emit SwapExecuted(msg.sender, token, tokenAmount);
     }
 
-    function setnetXToken(address _netXToken) external onlyOwner {
+    function setNetXToken(address _netXToken) external onlyOwner {
         require(_netXToken != address(0), "Invalid NetX token address");
         netXToken = _netXToken;
     }
@@ -107,7 +121,16 @@ contract NetXSwap is Ownable, ReentrancyGuard {
         IERC20(_token).transfer(_receiver, balance);
     }
 
-    function setSwapStatus(bool _status) external onlyOwner {
-        openSwap = _status;
+    function setSwapTimeRange(
+        uint256 _startTime,
+        uint256 _endTime
+    ) external onlyOwner {
+        require(_startTime < _endTime, "Invalid swap time range");
+        startTime = _startTime;
+        endTime = _endTime;
+    }
+
+    function isSwapOpen() external view returns (bool) {
+        return startTime <= block.timestamp && block.timestamp <= endTime;
     }
 }
