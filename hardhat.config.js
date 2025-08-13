@@ -2,6 +2,8 @@ require("@nomicfoundation/hardhat-toolbox");
 require("@nomicfoundation/hardhat-ignition");
 require("dotenv").config();
 
+// require("./tasks/sendTokensByNetwork.task");
+
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
@@ -40,7 +42,11 @@ module.exports = {
   },
 
   networks: {
-    hardhat: {},
+    hardhat: {
+      hardhat: {
+        chainId: 97, // 设置为所需的链 ID
+      },
+    },
     bsc: {
       url: `https://bsc-mainnet.infura.io/v3/${process.env.INFURA_PROJECT_ID}`,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],

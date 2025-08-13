@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: MIT
 const {
   time,
   loadFixture,
@@ -8,215 +7,216 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("NetXSwap", function () {
-  // We define a fixture to reuse the same setup in every test.
   async function deployNetXSwapFixture() {
-    const [owner, user, anotherUser] = await ethers.getSigners();
+    const [owner, user1, user2, triasNewHolder] = await ethers.getSigners();
+    const triasNewTokenFactory = await ethers.getContractFactory("MockERC20");
+    const netXTokenFactory = await ethers.getContractFactory("MockERC20");
 
-    // 代币合约工厂
-    const NetXTokenFactory = await ethers.getContractFactory("NetXToken");
-    const TriasNewTokenFactory = await ethers.getContractFactory("TRIAS");
-    const TriasOldTokenFactory = await ethers.getContractFactory("TriasOnBSC");
-    const THECOTokenFactory = await ethers.getContractFactory("THECO");
-    const TTokenFactory = await ethers.getContractFactory("TTOKEN");
+    const triasNewToken = await triasNewTokenFactory.deploy("TriasNew", "TRIAS");
+    const netXToken = await netXTokenFactory.deploy("NetX", "NETX");
 
-    // 部署代币合约
-    const netXToken = await NetXTokenFactory.deploy(owner.address);
-    const triasNewToken = await TriasNewTokenFactory.deploy(owner.address);
-    const triasOldToken = await TriasOldTokenFactory.deploy("Trias Token", "TRIAS", 10000);
-    const tHECOToken = await THECOTokenFactory.deploy();
-    const tToken = await TTokenFactory.deploy();
+    const startTime = (await time.latest()) + 60;
+    const endTime = startTime + 3600;
 
-    // 部署 NetXSwap 合约
-    const NetXSwap = await ethers.getContractFactory("NetXSwap");
-    const netXSwap = await NetXSwap.deploy(owner.address, netXToken.target);
-
-    // // 铸造一些代币给 NetXSwap 合约和用户
-    const MINT_AMOUNT = ethers.parseEther("10000");
-    await netXToken.transfer(netXSwap.target, MINT_AMOUNT);
-
-    await triasNewToken.transfer(user.address, ethers.parseEther("1000"));
-    await triasOldToken.transfer(user.address, ethers.parseEther("1000"));
-    await tHECOToken.transfer(user.address, ethers.parseEther("1000"));
-    await tToken.transfer(user.address, ethers.parseEther("1000"));
-
-    // 设置 NetXSwap 合约中的可交换代币地址
-    await netXSwap.setTokens(
+    const NetXSwapFactory = await ethers.getContractFactory("NetXSwap");
+    const netXSwap = await NetXSwapFactory.deploy(
+      owner.address,
       triasNewToken.target,
-      triasOldToken.target,
-      tHECOToken.target,
-      tToken.target
+      startTime,
+      endTime
     );
+
+    await netXSwap.connect(owner).setTokens(
+      netXToken.target,
+      ethers.ZeroAddress,
+      ethers.ZeroAddress,
+      ethers.ZeroAddress
+    );
+
+    await netXSwap.connect(owner).setVerifier(owner.address);
+    await triasNewToken.connect(owner).mint(triasNewHolder.address, ethers.parseEther("1000"));
+    await netXToken.connect(owner).mint(netXSwap.target, ethers.parseEther("1000"));
 
     return {
       netXSwap,
-      netXToken,
       triasNewToken,
-      triasOldToken,
-      tHECOToken,
-      tToken,
+      netXToken,
       owner,
-      user,
-      anotherUser,
+      user1,
+      user2,
+      triasNewHolder,
+      startTime,
+      endTime
     };
   }
 
+  // ---
 
-  describe("Deployment", function () {
-    it("应该正确设置所有者", async function () {
-      const { netXSwap, owner } = await loadFixture(deployNetXSwapFixture);
-      expect(await netXSwap.owner()).to.equal(owner.address);
-    });
+  describe("Cross-chain Swap and Claim Process", function () {
+    it("should sign sucesfully", async function () {
+      const privateKey = process.env.PRIVATE_KEY;
+      if (!privateKey) {
+        throw new Error("PRIVATE_KEY not found in .env file");
+      }
 
-    it("应该正确设置 NetX 代币地址", async function () {
-      const { netXSwap, netXToken } = await loadFixture(
-        deployNetXSwapFixture
-      );
-      expect(await netXSwap.netXToken()).to.equal(netXToken.target);
-    });
+      // 创建 signer
+      const provider = hre.ethers.provider; // 获取 Hardhat 的 provider（基于当前网络）
+      const signer = new ethers.Wallet(privateKey, provider);
 
-    it("应该正确设置所有可交换代币地址", async function () {
-      const { netXSwap, triasNewToken, triasOldToken, tHECOToken, tToken } =
-        await loadFixture(deployNetXSwapFixture);
+      const sourceChainId = 11155111;
+      const claimNonce = 0; // First claim has a nonce of 0
+      // const orderId = ethers.keccak256(ethers.toUtf8Bytes("test-order"));
+      // console.log("Order ID:", orderId);
+      const orderId = "0x15e7e0aeef3256b34f3f1d44e343dacb80a0ea0c7e4546881443d1d7a139efff";
+      console.log("Order ID:", orderId);
 
-      expect(await netXSwap.triasNewToken()).to.equal(triasNewToken.target);
-      expect(await netXSwap.triasOldToken()).to.equal(triasOldToken.target);
-      expect(await netXSwap.tHECOToken()).to.equal(tHECOToken.target);
-      expect(await netXSwap.tToken()).to.equal(tToken.target);
-    });
-
-    it("初始时交换功能应为关闭状态", async function () {
-      const { netXSwap } = await loadFixture(deployNetXSwapFixture);
-      expect(await netXSwap.openSwap()).to.be.false;
-    });
-  });
-
-  describe("管理功能", function () {
-    it("所有者应该能够设置交换状态", async function () {
-      const { netXSwap } = await loadFixture(deployNetXSwapFixture);
-      await netXSwap.setSwapStatus(true);
-      expect(await netXSwap.openSwap()).to.be.true;
-    });
-
-    it("非所有者不能设置交换状态", async function () {
-      const { netXSwap, anotherUser } = await loadFixture(
-        deployNetXSwapFixture
-      );
-      await expect(
-        netXSwap.connect(anotherUser).setSwapStatus(true)
-      ).to.be.revertedWithCustomError(netXSwap, "OwnableUnauthorizedAccount");
-    });
-
-    it("所有者应该能够从合约中取出代币", async function () {
-      const { netXSwap, netXToken, owner } = await loadFixture(
-        deployNetXSwapFixture
+      const messageHash = ethers.solidityPackedKeccak256(
+        ["address", "uint256", "uint256", "uint256", "address", "bytes32"],
+        ["0xD706CA79172d07802ca0a4DEa1ce7edFfbEFAA8D", "100000000000000000000", claimNonce, sourceChainId, "0xC156A1cac848D371A696888b9D41B7490c4F10d3", orderId]
       );
 
-      const balanceBefore = await netXToken.balanceOf(owner.address);
-      const contractBalance = await netXToken.balanceOf(netXSwap.target);
+      // The verifier (owner) signs the message.
+      const signature = await signer.signMessage(ethers.getBytes(messageHash));
+      console.log("Signature:", signature);
 
-      await netXSwap.claimTokens(netXToken.target, owner.address);
-
-      expect(await netXToken.balanceOf(owner.address)).to.equal(
-        balanceBefore + contractBalance
-      );
     });
-  });
+    it("Should complete the full swap and claim process from a non-BSC chain to BSC", async function () {
+      const {
+        netXSwap,
+        triasNewToken,
+        netXToken,
+        owner,
+        triasNewHolder,
+        startTime,
+      } = await loadFixture(deployNetXSwapFixture);
 
-  describe("代币交换 (swapToNetX)", function () {
-    // Before each swap test, let's open the swap
-    beforeEach(async function () {
-      const { netXSwap } = await loadFixture(deployNetXSwapFixture);
-      await netXSwap.setSwapStatus(true);
-    });
+      await time.increaseTo(startTime + 1);
 
-    it("应该成功将 TriasNew 代币交换成 NetX", async function () {
-      const { netXSwap, netXToken, triasNewToken, user } = await loadFixture(
-        deployNetXSwapFixture
-      );
+      const swapAmount = ethers.parseEther("1000");
+      const initialUserBalance = await triasNewToken.balanceOf(triasNewHolder.address);
 
-      const userTriasNewBalance = await triasNewToken.balanceOf(user.address);
-      const userNetXBalanceBefore = await netXToken.balanceOf(user.address);
-
-      // 用户需要先授权
+      // Step 1: User performs a swap on a non-BSC chain (e.g., Hardhat's default chain)
+      // The `swapToNetX` call will transfer the tokens to the contract and emit an event.
       await triasNewToken
-        .connect(user)
-        .approve(netXSwap.target, userTriasNewBalance);
+        .connect(triasNewHolder)
+        .approve(netXSwap.target, swapAmount);
 
-      await netXSwap.setSwapStatus(true);
-      await expect(netXSwap.connect(user).swapToNetX(1))
-        .to.emit(netXSwap, "SwapExecuted")
-        .withArgs(user.address, triasNewToken.target, userTriasNewBalance);
+      const swapTx = await netXSwap.connect(triasNewHolder).swapToNetX(1);
+      const swapReceipt = await swapTx.wait();
 
-      const userNetXBalanceAfter = await netXToken.balanceOf(user.address);
-      const contractTriasNewBalance = await triasNewToken.balanceOf(netXSwap.target);
-
-      expect(userNetXBalanceAfter).to.equal(
-        userNetXBalanceBefore + userTriasNewBalance
+      // Check user's balance after the swap. It should be reduced by the swap amount.
+      expect(await triasNewToken.balanceOf(triasNewHolder.address)).to.equal(
+        initialUserBalance - swapAmount
       );
-      expect(contractTriasNewBalance).to.equal(userTriasNewBalance);
-    });
 
-    it("应该在交换功能关闭时失败", async function () {
-      const { netXSwap, user } = await loadFixture(deployNetXSwapFixture);
-      await netXSwap.setSwapStatus(false);
-      await expect(netXSwap.connect(user).swapToNetX(1)).to.be.revertedWith(
-        "Swap is not open"
+      // Step 2: Simulate backend listening for the `SwapExecuted` event
+      const swapEvent = swapReceipt.logs.find(
+        (log) => log.topics[0] === netXSwap.interface.getEvent("SwapExecuted").topicHash
       );
-    });
+      expect(swapEvent).to.exist;
 
-    it("当用户余额不足时应该失败", async function () {
-      const { netXSwap, triasNewToken, anotherUser } = await loadFixture(
-        deployNetXSwapFixture
+      // Parse event data to get the user and amount.
+      const decodedEvent = netXSwap.interface.decodeEventLog(
+        "SwapExecuted",
+        swapEvent.data,
+        swapEvent.topics
       );
-      await netXSwap.setSwapStatus(true);
-      // anotherUser 没有任何 triasNew 代币
+
+      const eventUser = decodedEvent.user;
+      const eventAmount = decodedEvent.amountOut;
+
+      expect(eventUser).to.equal(triasNewHolder.address);
+      expect(eventAmount).to.equal(swapAmount);
+
+      // Step 3: Simulate backend signing the message for the claim on BSC
+      const bscChainId = 97; // Mock BSC chain ID
+      const claimNonce = 0; // First claim has a nonce of 0
+
+      const messageHash = ethers.solidityPackedKeccak256(
+        ["address", "uint256", "uint256", "uint256", "address"],
+        [eventUser, eventAmount, claimNonce, bscChainId, netXSwap.target]
+      );
+
+      // The verifier (owner) signs the message.
+      const signature = await owner.signMessage(ethers.getBytes(messageHash));
+
+      // Step 4: User switches to BSC and performs the claim
+      const initialNetXBalance = await netXToken.balanceOf(triasNewHolder.address);
+
+      // The `userClaim` function will now be called on the BSC network.
       await expect(
-        netXSwap.connect(anotherUser).swapToNetX(1)
-      ).to.be.revertedWith("Trias New Token zero balance");
+        netXSwap.connect(triasNewHolder).userClaim(eventAmount, bscChainId, signature)
+      )
+        .to.emit(netXSwap, "ClaimExecuted")
+        .withArgs(triasNewHolder.address, bscChainId, eventAmount, 1);
+
+      // Verify the user received the NetX tokens
+      const finalNetXBalance = await netXToken.balanceOf(triasNewHolder.address);
+      expect(finalNetXBalance).to.equal(initialNetXBalance + eventAmount);
     });
+  });
 
-    it("当合约中的 NetX 代币余额不足时应该失败", async function () {
-      const { netXSwap, netXToken, triasNewToken, user, anotherUser } = await loadFixture(deployNetXSwapFixture);
+  // ---
 
-      await netXSwap.setSwapStatus(true);
+  describe("Ownership and Admin Functions", function () {
+    it("Should allow the owner to set tokens", async function () {
+      const {
+        netXSwap,
+        owner,
+        user1
+      } = await loadFixture(deployNetXSwapFixture);
+      await expect(netXSwap.connect(user1).setTokens(
+        user1.address,
+        user1.address,
+        user1.address,
+        user1.address
+      )).to.be.revertedWithCustomError(netXSwap, "OwnableUnauthorizedAccount");
 
-      // 故意将合约的 NetX 代币余额耗尽
-      await netXSwap.claimTokens(netXToken.target, anotherUser.address);
-
-      const userTriasNewBalance = await triasNewToken.balanceOf(user.address);
-      await triasNewToken.connect(user).approve(netXSwap.target, userTriasNewBalance);
-
-      await expect(netXSwap.connect(user).swapToNetX(1)).to.be.revertedWith(
-        "Insufficient NetX balance"
+      await netXSwap.connect(owner).setTokens(
+        user1.address,
+        user1.address,
+        user1.address,
+        user1.address
       );
+      expect(await netXSwap.netXToken()).to.equal(user1.address);
+      expect(await netXSwap.triasOldToken()).to.equal(user1.address);
+      expect(await netXSwap.tHECOToken()).to.equal(user1.address);
+      expect(await netXSwap.tToken()).to.equal(user1.address);
     });
 
-    it("当用户未授权时应该失败", async function () {
-      const { netXSwap, user } = await loadFixture(deployNetXSwapFixture);
-      // 用户没有调用 approve
-      await expect(netXSwap.connect(user).swapToNetX(0)).to.be.reverted;
+    it("Should allow the owner to set the verifier address", async function () {
+      const {
+        netXSwap,
+        owner,
+        user1
+      } = await loadFixture(deployNetXSwapFixture);
+      // We set the verifier in the fixture, so we'll test updating it here
+      await expect(netXSwap.connect(user1).setVerifier(user1.address))
+        .to.be.revertedWithCustomError(netXSwap, "OwnableUnauthorizedAccount");
+
+      await expect(netXSwap.connect(owner).setVerifier(user1.address))
+        .to.emit(netXSwap, "VerifierUpdated")
+        .withArgs(user1.address);
+      expect(await netXSwap.verifyAddress()).to.equal(user1.address);
     });
 
-    it("应该能够处理所有四种代币类型", async function () {
-      const { netXSwap, netXToken, triasNewToken, triasOldToken, tHECOToken, tToken, user } = await loadFixture(deployNetXSwapFixture);
-
-      await netXSwap.setSwapStatus(true);
-
-      const triasNewAmount = await triasNewToken.balanceOf(user.address);
-      await triasNewToken.connect(user).approve(netXSwap.target, triasNewAmount);
-      await expect(netXSwap.connect(user).swapToNetX(1)).to.not.be.reverted;
-
-      const triasOldAmount = await triasOldToken.balanceOf(user.address);
-      await triasOldToken.connect(user).approve(netXSwap.target, triasOldAmount);
-      await expect(netXSwap.connect(user).swapToNetX(2)).to.not.be.reverted;
-
-      const tHECOAmount = await tHECOToken.balanceOf(user.address);
-      await tHECOToken.connect(user).approve(netXSwap.target, tHECOAmount);
-      await expect(netXSwap.connect(user).swapToNetX(3)).to.not.be.reverted;
-
-      const tAmount = await tToken.balanceOf(user.address);
-      await tToken.connect(user).approve(netXSwap.target, tAmount);
-      await expect(netXSwap.connect(user).swapToNetX(4)).to.not.be.reverted;
+    it("Should allow the owner to claim tokens from the contract", async function () {
+      const {
+        netXSwap,
+        owner,
+        triasNewToken,
+        user1
+      } = await loadFixture(deployNetXSwapFixture);
+      const depositAmount = ethers.parseEther("50");
+      await triasNewToken.connect(owner).mint(netXSwap.target, depositAmount);
+      expect(await triasNewToken.balanceOf(netXSwap.target)).to.equal(
+        depositAmount
+      );
+      await netXSwap.connect(owner).claimTokens(triasNewToken.target, user1.address);
+      expect(await triasNewToken.balanceOf(netXSwap.target)).to.equal(0);
+      expect(await triasNewToken.balanceOf(user1.address)).to.equal(
+        depositAmount
+      );
     });
   });
 });
