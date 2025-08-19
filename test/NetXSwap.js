@@ -63,16 +63,16 @@ describe("NetXSwap", function () {
       const provider = hre.ethers.provider; // 获取 Hardhat 的 provider（基于当前网络）
       const signer = new ethers.Wallet(privateKey, provider);
 
-      const sourceChainId = 11155111;
-      const claimNonce = 0; // First claim has a nonce of 0
+      const sourceChainId = 345;
+      const claimNonce = 1; // First claim has a nonce of 0
       // const orderId = ethers.keccak256(ethers.toUtf8Bytes("test-order"));
       // console.log("Order ID:", orderId);
-      const orderId = "0x15e7e0aeef3256b34f3f1d44e343dacb80a0ea0c7e4546881443d1d7a139efff";
+      const orderId = "0x5bafa7e8c231172c0b27052dc79cf931dc940a905e9f415c6bbe5fbbf8d3e387";
       console.log("Order ID:", orderId);
 
       const messageHash = ethers.solidityPackedKeccak256(
         ["address", "uint256", "uint256", "uint256", "address", "bytes32"],
-        ["0xD706CA79172d07802ca0a4DEa1ce7edFfbEFAA8D", "100000000000000000000", claimNonce, sourceChainId, "0xC156A1cac848D371A696888b9D41B7490c4F10d3", orderId]
+        ["0xa6996496C1d32324755676cA3DaD167082BaE53c", "100000000000000000000", claimNonce, sourceChainId, "0xC156A1cac848D371A696888b9D41B7490c4F10d3", orderId]
       );
 
       // The verifier (owner) signs the message.
